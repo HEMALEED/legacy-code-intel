@@ -6,9 +6,14 @@ Start with:
 """
 from __future__ import annotations
 
+import logging
+
 from celery import Celery
+from celery.exceptions import MaxRetriesExceededError
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 celery_app = Celery(
     "lcip",
@@ -84,12 +89,23 @@ def run_doc_agent_task(self, job_id: str) -> None:
         db.commit()
 
     except Exception as exc:
+        logger.exception("run_doc_agent_task failed for job %s: %s", job_id, exc)
         db.rollback()
-        job = db.query(Job).filter(Job.id == job_id).first()
-        if job:
-            job.status = JobStatus.failed
-            job.error  = str(exc)
-            db.commit()
-        raise self.retry(exc=exc, countdown=10)
-    finally:
+        try:
+            # Re-fetch in a clean state after rollback
+            job = db.query(Job).filter(Job.id == job_id).first()
+            if job:
+                job.status = JobStatus.failed
+                job.error  = str(exc)
+                db.commit()
+        except Exception:
+            logger.exception("Could not update job status to failed for job %s", job_id)
+        finally:
+            db.close()
+        try:
+            raise self.retry(exc=exc, countdown=10)
+        except MaxRetriesExceededError:
+            # Max retries hit — job is already marked failed above, just return
+            logger.error("Max retries exceeded for job %s", job_id)
+    else:
         db.close()

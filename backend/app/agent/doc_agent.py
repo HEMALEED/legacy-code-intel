@@ -13,8 +13,12 @@ The graph state is a plain TypedDict; each node receives and returns it.
 from __future__ import annotations
 
 import json
+import logging
+import re
 import textwrap
 from typing import Any, TypedDict
+
+logger = logging.getLogger(__name__)
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -100,6 +104,32 @@ def _split_chunks(source: str) -> list[str]:
     return chunks or [source]
 
 
+def _extract_json(raw: str) -> dict:
+    """
+    Robustly extract the first valid JSON object from LLM output.
+    Handles: plain JSON, ```json fences, ```  fences, and prose before/after.
+    """
+    raw = raw.strip()
+
+    # 1. Strip any markdown code fence (```json ... ``` or ``` ... ```)
+    fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
+    if fence_match:
+        return json.loads(fence_match.group(1))
+
+    # 2. Try the whole string first (clean JSON response)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+
+    # 3. Find the first { ... } block in the output (Granite adds prose around JSON)
+    brace_match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if brace_match:
+        return json.loads(brace_match.group(0))
+
+    raise ValueError(f"No JSON object found in LLM response. Raw output: {raw[:500]!r}")
+
+
 def _llm_json(prompt_text: str) -> dict:
     """Call the LLM with a JSON-mode prompt and return parsed dict."""
     llm = get_llm()
@@ -109,11 +139,8 @@ def _llm_json(prompt_text: str) -> dict:
     ]
     response = llm.invoke(messages)
     raw = response.content if hasattr(response, "content") else str(response)
-    # Strip accidental markdown fences if the LLM ignores instructions
-    raw = raw.strip()
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    return json.loads(raw)
+    logger.debug("LLM raw response (first 300 chars): %s", raw[:300])
+    return _extract_json(raw)
 
 
 # ── Graph nodes ───────────────────────────────────────────────────────────────

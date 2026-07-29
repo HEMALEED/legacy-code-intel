@@ -39,6 +39,9 @@ Respond ONLY with valid JSON — no markdown fences, no extra text.
 # ── Step 3: Analyse ───────────────────────────────────────────────────────────
 
 ANALYSE_PROMPT = """\
+You are an expert IBM i (AS/400) legacy code analyst. \
+Respond ONLY with a valid JSON object — no markdown fences, no explanation, no extra text.
+
 Analyse the following {language} source code.
 
 Return a JSON object with EXACTLY these keys:
@@ -59,6 +62,9 @@ SOURCE CODE:
 # ── Step 4a: Call-flow diagram ────────────────────────────────────────────────
 
 CALL_FLOW_PROMPT = """\
+You are an expert IBM i (AS/400) legacy code analyst. \
+Respond ONLY with a valid JSON object — no markdown fences, no explanation, no extra text.
+
 Given this {language} program, produce a Mermaid flowchart showing the call flow
 (main routine → subroutines / subprocedures → external program calls).
 
@@ -74,6 +80,9 @@ SOURCE CODE:
 # ── Step 4b: Data-flow diagram ────────────────────────────────────────────────
 
 DATA_FLOW_PROMPT = """\
+You are an expert IBM i (AS/400) legacy code analyst. \
+Respond ONLY with a valid JSON object — no markdown fences, no explanation, no extra text.
+
 Given this {language} program and its file usage list below, produce a Mermaid
 flowchart showing how data moves through the program (inputs → processing → outputs).
 

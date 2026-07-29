@@ -233,7 +233,7 @@ def node_assemble(state: AgentState) -> AgentState:
 
 # ── Graph wiring ──────────────────────────────────────────────────────────────
 
-from langgraph.graph import StateGraph, END     # noqa: E402
+from langgraph.graph import StateGraph, END, START  # noqa: E402
 
 
 def build_graph():
@@ -244,7 +244,7 @@ def build_graph():
     g.add_node("diagram",  node_diagram)
     g.add_node("assemble", node_assemble)
 
-    g.set_entry_point("parse")
+    g.add_edge(START,      "parse")
     g.add_edge("parse",    "chunk")
     g.add_edge("chunk",    "analyse")
     g.add_edge("analyse",  "diagram")

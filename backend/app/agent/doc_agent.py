@@ -32,8 +32,8 @@ from app.config import settings
 
 def _build_llm():
     if settings.llm_provider == "watsonx":
-        from langchain_ibm import WatsonxLLM
-        return WatsonxLLM(
+        from langchain_ibm import ChatWatsonx
+        return ChatWatsonx(
             model_id=settings.watsonx_model,
             url=settings.watsonx_url,
             apikey=settings.watsonx_api_key,

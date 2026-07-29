@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     watsonx_api_key: str = ""
     watsonx_project_id: str = ""
     watsonx_url: str = "https://us-south.ml.cloud.ibm.com"
-    watsonx_model: str = "ibm/granite-13b-chat-v2"
+    watsonx_model: str = "ibm/granite-3-8b-instruct"
 
     secret_key: str = "change-me"
     max_upload_bytes: int = 52_428_800      # 50 MB

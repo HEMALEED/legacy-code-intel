@@ -44,6 +44,22 @@ def _build_llm():
             project_id=settings.watsonx_project_id,
             params={"max_new_tokens": 4096, "temperature": 0},
         )
+    if settings.llm_provider == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(
+            model=settings.anthropic_model,
+            api_key=settings.anthropic_api_key,
+            temperature=0,
+            max_tokens=4096,
+        )
+    if settings.llm_provider == "ollama":
+        from langchain_ollama import ChatOllama
+        return ChatOllama(
+            model=settings.ollama_model,
+            base_url=settings.ollama_base_url,
+            temperature=0,
+            format="json",          # forces JSON output — Ollama native feature
+        )
     # default: openai
     from langchain_openai import ChatOpenAI
     return ChatOpenAI(

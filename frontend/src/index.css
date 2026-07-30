@@ -1,2 +1,191 @@
+/* ── Reset & tokens ──────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
-body { margin: 0; background: #ffffff; color: #161616; }
+
+:root {
+  --bg-base:       #0f1117;
+  --bg-surface:    #1a1d27;
+  --bg-raised:     #22263a;
+  --bg-hover:      #2a2f45;
+  --border:        #2e3348;
+  --border-light:  #3a4060;
+
+  --text-primary:  #e8eaf0;
+  --text-secondary:#8b90a8;
+  --text-muted:    #555a72;
+
+  --accent-blue:   #4f8ef7;
+  --accent-blue-bg:#1a2540;
+  --accent-green:  #34c474;
+  --accent-green-bg:#0f2a1a;
+  --accent-amber:  #f5a623;
+  --accent-amber-bg:#2a1f0a;
+  --accent-red:    #f05353;
+  --accent-red-bg: #2a0f0f;
+  --accent-purple: #a78bfa;
+
+  --sidebar-width: 220px;
+  --topbar-height: 44px;
+  --statusbar-height: 28px;
+  --assistant-width: 300px;
+
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+html, body, #root {
+  margin: 0; padding: 0;
+  height: 100%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+
+/* ── Utility ─────────────────────────────────────────────────────────────── */
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+code, .mono { font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace; font-size: 0.85em; }
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  padding: 0 1rem;
+  flex-shrink: 0;
+}
+.tab {
+  padding: 0.6rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  user-select: none;
+  white-space: nowrap;
+  transition: color 0.1s;
+}
+.tab:hover { color: var(--text-primary); }
+.tab.active {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+}
+
+/* ── Badges ──────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.badge-blue   { background: var(--accent-blue-bg);   color: var(--accent-blue); }
+.badge-green  { background: var(--accent-green-bg);  color: var(--accent-green); }
+.badge-amber  { background: var(--accent-amber-bg);  color: var(--accent-amber); }
+.badge-red    { background: var(--accent-red-bg);    color: var(--accent-red); }
+.badge-purple { background: #2a1f45; color: var(--accent-purple); }
+
+/* ── Section cards ───────────────────────────────────────────────────────── */
+.section-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+.section-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+.section-card-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.section-card-body { padding: 0.75rem 1rem; }
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.data-table th {
+  text-align: left;
+  padding: 0.4rem 0.75rem;
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+}
+.data-table td {
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  vertical-align: top;
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: var(--bg-hover); }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: opacity 0.1s;
+  white-space: nowrap;
+}
+.btn:hover { opacity: 0.85; }
+.btn-primary { background: var(--accent-blue); color: #fff; }
+.btn-ghost   { background: transparent; color: var(--text-secondary); border-color: var(--border-light); }
+.btn-ghost:hover { color: var(--text-primary); }
+
+/* ── Chat ────────────────────────────────────────────────────────────────── */
+.chat-bubble-user {
+  background: var(--accent-blue-bg);
+  color: var(--text-primary);
+  border-radius: 10px 10px 2px 10px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  align-self: flex-end;
+  max-width: 85%;
+}
+.chat-bubble-ai {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  border-radius: 10px 10px 10px 2px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  align-self: flex-start;
+  max-width: 90%;
+  line-height: 1.55;
+}
+
+/* ── Status dot ──────────────────────────────────────────────────────────── */
+.status-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}

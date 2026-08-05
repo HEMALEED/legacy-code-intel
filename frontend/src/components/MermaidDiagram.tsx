@@ -5,6 +5,7 @@ mermaid.initialize({
   startOnLoad: false,
   theme: 'dark',
   darkMode: true,
+  suppressErrorRendering: true,   // stop the error toast popup
   themeVariables: {
     background: '#1a1d27',
     primaryColor: '#2a2f45',
@@ -21,6 +22,17 @@ interface Props {
   source: string
 }
 
+// Try to auto-fix common LLM mistakes in Mermaid output
+function sanitizeMermaid(src: string): string {
+  return src
+    .trim()
+    // Remove accidental markdown fences
+    .replace(/^```[a-z]*\n?/i, '')
+    .replace(/```$/,            '')
+    // Ensure it starts with a valid diagram type
+    .trim()
+}
+
 export default function MermaidDiagram({ source }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
@@ -29,24 +41,29 @@ export default function MermaidDiagram({ source }: Props) {
   useEffect(() => {
     if (!ref.current || !source.trim()) return
     setError(null)
-    mermaid.render(id.current, source)
+    const clean = sanitizeMermaid(source)
+    mermaid.render(id.current, clean)
       .then(({ svg }) => {
         if (ref.current) ref.current.innerHTML = svg
       })
       .catch((e) => {
         setError(String(e))
       })
-    // Increment id so re-renders use a fresh element
     id.current = `mermaid-${++_counter}`
   }, [source])
 
   if (error) {
     return (
       <div style={{ padding: '1rem' }}>
-        <p style={{ color: 'var(--accent-amber)', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
-          ⚠ Could not render diagram
-        </p>
-        <pre style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+          <span style={{ color: 'var(--accent-amber)', fontSize: '0.82rem', fontWeight: 600 }}>
+            ⚠ Diagram could not be rendered
+          </span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+            — the AI generated invalid Mermaid syntax. Raw source below:
+          </span>
+        </div>
+        <pre style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', background: 'var(--bg-raised)', padding: '0.75rem', borderRadius: 4 }}>
           {source}
         </pre>
       </div>

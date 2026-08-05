@@ -41,7 +41,7 @@ function inferLibrary(lang: string | null): string {
   }
 }
 
-export default function Sidebar({ selectedId, onSelect, onUploadClick, refreshTick }: Props) {
+export default function Sidebar({ selectedId, onSelect, refreshTick }: Omit<Props, 'onUploadClick'> & { onUploadClick?: () => void }) {
   const [jobs, setJobs] = useState<Job[]>([])
   const [navItem, setNavItem] = useState<'documentation' | 'diagrams'>('documentation')
 

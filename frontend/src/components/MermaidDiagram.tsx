@@ -29,7 +29,14 @@ function sanitizeMermaid(src: string): string {
     // Remove accidental markdown fences
     .replace(/^```[a-z]*\n?/i, '')
     .replace(/```$/,            '')
-    // Ensure it starts with a valid diagram type
+    // Fix capitalised keywords that Mermaid requires lowercase
+    .replace(/\bSubgraph\b/g,  'subgraph')
+    .replace(/\bEnd\b/g,       'end')
+    .replace(/\bGraph\b/g,     'graph')
+    .replace(/\bFlowchart\b/g, 'flowchart')
+    .replace(/\bSequenceDiagram\b/g, 'sequenceDiagram')
+    // Fix arrow syntax: --> with label should be -->|label|
+    .replace(/--([a-zA-Z])/g, '-- $1')
     .trim()
 }
 

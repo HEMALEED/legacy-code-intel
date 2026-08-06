@@ -9,6 +9,7 @@ export default function App() {
   const [refreshTick, setRefreshTick] = useState(0)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [showAssistant, setShowAssistant] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleJobCreated = useCallback((job: JobCreated) => {
@@ -72,6 +73,16 @@ export default function App() {
           <span style={{ fontSize: '0.75rem', color: 'var(--accent-red)' }}>{uploadError}</span>
         )}
 
+        {/* AI Assistant toggle */}
+        <button
+          className="btn btn-ghost"
+          onClick={() => setShowAssistant(v => !v)}
+          title={showAssistant ? 'Hide AI Assistant' : 'Show AI Assistant'}
+          style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', opacity: showAssistant ? 1 : 0.5 }}
+        >
+          ■ AI {showAssistant ? 'ON' : 'OFF'}
+        </button>
+
         {/* Upload button */}
         <input
           ref={fileInputRef}
@@ -121,9 +132,11 @@ export default function App() {
         }
 
         {/* AI Assistant panel */}
-        <div style={{ width: 'var(--assistant-width)', flexShrink: 0 }}>
-          <AiAssistant job={selectedJob} />
-        </div>
+        {showAssistant && (
+          <div style={{ width: 'var(--assistant-width)', flexShrink: 0 }}>
+            <AiAssistant job={selectedJob} />
+          </div>
+        )}
       </div>
 
       {/* ── Status bar ──────────────────────────────────────────────── */}

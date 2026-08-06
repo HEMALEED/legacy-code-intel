@@ -1,18 +1,24 @@
 import { useState, useEffect } from 'react'
-import { getJob, type Job } from '../api/client'
+import { getJob, getSourceFile, type Job } from '../api/client'
 import DocView from './DocView'
 import MermaidDiagram from './MermaidDiagram'
 
-type Tab = 'documentation' | 'callflow' | 'dataflow' | 'raw'
+type Tab = 'documentation' | 'callflow' | 'dataflow' | 'source' | 'raw'
 
-interface Props { jobId: string }
+interface Props {
+  jobId: string
+}
 
 export default function MainPanel({ jobId }: Props) {
-  const [job, setJob] = useState<Job | null>(null)
-  const [tab, setTab] = useState<Tab>('documentation')
+  const [job, setJob]           = useState<Job | null>(null)
+  const [tab, setTab]           = useState<Tab>('documentation')
+  const [source, setSource]     = useState<string | null>(null)
+  const [sourceLoading, setSourceLoading] = useState(false)
 
+  // Poll job status
   useEffect(() => {
     setTab('documentation')
+    setSource(null)
     let active = true
     const poll = () =>
       getJob(jobId).then(j => {
@@ -24,6 +30,17 @@ export default function MainPanel({ jobId }: Props) {
     const id = setInterval(poll, 2500)
     return () => { active = false; clearInterval(id) }
   }, [jobId])
+
+  // Fetch source when source tab is selected
+  useEffect(() => {
+    if (tab !== 'source' || !job?.files[0]) return
+    if (source !== null) return   // already loaded
+    setSourceLoading(true)
+    getSourceFile(job.id, job.files[0].id)
+      .then(text => setSource(text))
+      .catch(() => setSource('// Could not load source file.'))
+      .finally(() => setSourceLoading(false))
+  }, [tab, job])
 
   if (!job) {
     return (
@@ -39,9 +56,10 @@ export default function MainPanel({ jobId }: Props) {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'documentation', label: '▶ Documentation' },
-    { key: 'callflow',      label: '■ Call Flow Diagram' },
+    { key: 'callflow',      label: '■ Call Flow' },
     { key: 'dataflow',      label: '◐ Data Flow' },
-    { key: 'raw',           label: '≡ Raw Source' },
+    { key: 'source',        label: '{ } Source' },
+    { key: 'raw',           label: '≡ Raw JSON' },
   ]
 
   return (
@@ -87,6 +105,30 @@ export default function MainPanel({ jobId }: Props) {
               ? <MermaidDiagram source={docs.data_flow_diagram} />
               : <p style={{ color: 'var(--text-muted)', padding: '2rem', textAlign: 'center' }}>No data flow diagram available.</p>
             }
+          </div>
+        )}
+
+        {tab === 'source' && (
+          <div style={{ display: 'flex', height: '100%' }}>
+            {sourceLoading && (
+              <p style={{ color: 'var(--text-muted)', padding: '2rem', margin: 0 }}>Loading source…</p>
+            )}
+            {!sourceLoading && source !== null && (
+              <table style={{ borderCollapse: 'collapse', width: '100%', fontFamily: '"JetBrains Mono","Fira Code","Cascadia Code",monospace', fontSize: '0.78rem', lineHeight: 1.6 }}>
+                <tbody>
+                  {source.split('\n').map((line, i) => (
+                    <tr key={i} style={{ verticalAlign: 'top' }}>
+                      <td style={{ padding: '0 0.75rem', textAlign: 'right', color: 'var(--text-muted)', userSelect: 'none', borderRight: '1px solid var(--border)', minWidth: 48, background: 'var(--bg-surface)' }}>
+                        {i + 1}
+                      </td>
+                      <td style={{ padding: '0 1rem', color: 'var(--text-secondary)', whiteSpace: 'pre', background: 'var(--bg-base)' }}>
+                        {line || ' '}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
 

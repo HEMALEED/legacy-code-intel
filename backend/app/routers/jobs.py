@@ -1,9 +1,10 @@
 """
 Jobs router — handles:
-  POST   /api/jobs          upload files or ZIP, create job, enqueue agent
-  GET    /api/jobs          list all jobs (newest first)
-  GET    /api/jobs/{job_id} get job + documentation result
-  DELETE /api/jobs/{job_id} delete a job and its uploaded files from disk
+  POST   /api/jobs                            upload files or ZIP, create job, enqueue agent
+  GET    /api/jobs                            list all jobs (newest first)
+  GET    /api/jobs/{job_id}                   get job + documentation result
+  GET    /api/jobs/{job_id}/source/{file_id}  return raw source file content as plain text
+  DELETE /api/jobs/{job_id}                   delete a job and its uploaded files from disk
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import Job, JobStatus, SourceFile
 from app.schemas import JobCreatedOut, JobOut
-from app.storage import make_storage_key, save_file, delete_job_files
+from app.storage import make_storage_key, save_file, delete_job_files, read_file_sync
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -137,6 +138,23 @@ def get_job(job_id: UUID, db: Session = Depends(get_db)):
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
     return job
+
+
+@router.get("/{job_id}/source/{file_id}")
+def get_source_file(job_id: UUID, file_id: int, db: Session = Depends(get_db)):
+    """Return the raw source file content as plain text."""
+    sf = db.query(SourceFile).filter(
+        SourceFile.id == file_id,
+        SourceFile.job_id == job_id,
+    ).first()
+    if sf is None:
+        raise HTTPException(status_code=404, detail="Source file not found.")
+    try:
+        content = read_file_sync(sf.storage_key)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found on disk.")
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(content.decode("utf-8", errors="replace"))
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)

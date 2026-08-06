@@ -76,3 +76,9 @@ export async function deleteJob(jobId: string): Promise<void> {
   const res = await fetch(`/api/jobs/${jobId}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete job')
 }
+
+export async function getSourceFile(jobId: string, fileId: number): Promise<string> {
+  const res = await fetch(`/api/jobs/${jobId}/source/${fileId}`)
+  if (!res.ok) throw new Error('Source file not found')
+  return res.text()
+}

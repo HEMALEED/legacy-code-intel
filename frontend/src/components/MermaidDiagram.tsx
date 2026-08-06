@@ -39,34 +39,27 @@ function sanitizeMermaid(src: string): string {
   s = s.replace(/\bSequenceDiagram\b/g, 'sequenceDiagram')
 
   // 3. Fix invalid custom arrows: --read->, --write-> etc. → -->|read|
-  //    Must run BEFORE colon-label fix so the arrow token is clean first
   s = s.replace(/--([a-zA-Z][a-zA-Z0-9]*)-->/g, '-->|$1|')   // --read--> variant
   s = s.replace(/--([a-zA-Z][a-zA-Z0-9]*)->/g,  '-->|$1|')   // --read-> variant
 
-  // 4. Fix subgraph curly-brace syntax line by line:
-  //    "subgraph devOpsMenu{" → "subgraph devOpsMenu"
-  //    A lone "}" line that closed a curly-brace subgraph → "end"
+  // 4. Fix subgraph curly-brace syntax and lone closing braces — line by line
   s = s.split('\n').map(line => {
-    // subgraph NAME{ or subgraph NAME { → strip the brace
-    if (/^\s*subgraph\s+\S.*\{/.test(line)) {
-      return line.replace(/\{.*$/, '').trimEnd()
-    }
-    // lone closing brace line → end
-    if (/^\s*\}\s*$/.test(line)) {
-      return line.replace('}', 'end')
-    }
+    if (/^\s*subgraph\s+\S.*\{/.test(line)) return line.replace(/\{.*$/, '').trimEnd()
+    if (/^\s*\}\s*$/.test(line))            return line.replace('}', 'end')
     return line
   }).join('\n')
 
-  // 5. Fix trailing colon on node IDs: "main --> SQL_OPEN:" → "main --> SQL_OPEN"
-  //    A bare word followed by colon at end of line or before newline is invalid
+  // 5. Fix trailing colon on bare node IDs at end of line: "A --> SQL_OPEN:" → "A --> SQL_OPEN"
   s = s.replace(/([A-Za-z0-9_]+):\s*$/gm, '$1')
 
-  // 6. Quote unquoted node labels that contain colons (invalid bare in Mermaid)
-  //    Pattern: NODEID: Some Text  →  NODEID["Some Text"]
-  //    Only applies inside arrow targets, e.g. "-->|label| NODEID: Text"
-  s = s.replace(/(-->(?:\|[^|]*\|)?\s*)([A-Za-z0-9_]+):\s*([^\n]+)/g,
-    (_m, arrow, id, label) => `${arrow}${id}["${label.trim()}"]`)
+  // 6. Quote node labels inside [...] that contain a space or colon but are NOT already quoted.
+  //    Covers:  A[Record: CHKOUT01]  →  A["Record: CHKOUT01"]
+  //             F[R CHKOUT01]        →  F["R CHKOUT01"]
+  //    Does NOT touch already-quoted labels like A["already fine"].
+  s = s.replace(
+    /([A-Za-z0-9_]+)\[([^\]"]+[\s:][^\]"]*)\]/g,
+    (_m, nodeId, label) => `${nodeId}["${label.trim()}"]`
+  )
 
   return s.trim()
 }

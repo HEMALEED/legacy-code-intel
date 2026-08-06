@@ -20,6 +20,7 @@ let _counter = 0
 
 interface Props {
   source: string
+  fallback?: boolean
 }
 
 // Try to auto-fix common LLM mistakes in Mermaid output
@@ -64,7 +65,7 @@ function sanitizeMermaid(src: string): string {
   return s.trim()
 }
 
-export default function MermaidDiagram({ source }: Props) {
+export default function MermaidDiagram({ source, fallback }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   const id = useRef(`mermaid-${++_counter}`)
@@ -101,5 +102,14 @@ export default function MermaidDiagram({ source }: Props) {
     )
   }
 
-  return <div ref={ref} style={{ padding: '1rem', overflowX: 'auto' }} />
+  return (
+    <div>
+      <div ref={ref} style={{ padding: '1rem', overflowX: 'auto' }} />
+      {fallback && (
+        <p style={{ margin: '0 1rem 0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+          Diagram generated from program structure (LLM output failed validation)
+        </p>
+      )}
+    </div>
+  )
 }

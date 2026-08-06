@@ -61,6 +61,7 @@ class DocumentationResult(Base):
     data_flow_diagram = Column(Text, nullable=True)       # Mermaid source
     files_used        = Column(JSON, nullable=True)       # [{name, mode, description}]
     business_rules    = Column(JSON, nullable=True)       # [{rule, line_ref, description}]
+    observations      = Column(JSON, nullable=True)       # [{finding, line_ref, severity}]
     raw_agent_output  = Column(JSON, nullable=True)       # full state for debugging
 
     job = relationship("Job", back_populates="docs")

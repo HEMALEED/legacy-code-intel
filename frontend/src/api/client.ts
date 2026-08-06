@@ -11,6 +11,13 @@ export interface BusinessRule {
   rule: string
   line_ref: string
   description: string
+  line_ref_verified: boolean
+}
+
+export interface Observation {
+  finding: string
+  line_ref: string
+  severity: string  // 'REVIEW' | 'INFO'
 }
 
 export interface DocumentationResult {
@@ -19,6 +26,8 @@ export interface DocumentationResult {
   data_flow_diagram: string | null
   files_used: FileUsed[] | null
   business_rules: BusinessRule[] | null
+  observations: Observation[] | null
+  raw_agent_output: Record<string, unknown> | null
 }
 
 export interface SourceFile {

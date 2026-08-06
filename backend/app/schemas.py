@@ -18,6 +18,13 @@ class BusinessRule(BaseModel):
     rule: str
     line_ref: str
     description: str
+    line_ref_verified: bool = True
+
+
+class Observation(BaseModel):
+    finding: str
+    line_ref: str
+    severity: str  # REVIEW | INFO
 
 
 # ─── Documentation result ─────────────────────────────────────────────────────
@@ -28,6 +35,8 @@ class DocumentationResultOut(BaseModel):
     data_flow_diagram: Optional[str]
     files_used: Optional[List[FileUsed]]
     business_rules: Optional[List[BusinessRule]]
+    observations: Optional[List[Observation]]
+    raw_agent_output: Optional[dict] = None
 
     model_config = {"from_attributes": True}
 

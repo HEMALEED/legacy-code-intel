@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agent.prompts import (
-    ANALYSE_PROMPT,
+    ANALYSE_SUMMARY_PROMPT,
+    ANALYSE_RULES_PROMPT,
+    ANALYSE_OBSERVATIONS_PROMPT,
     CALL_FLOW_PROMPT,
     DATA_FLOW_PROMPT,
     SYSTEM_ROLE,
@@ -94,8 +96,11 @@ class AgentState(TypedDict):
     summary: str
     files_used: list[dict]
     business_rules: list[dict]
+    observations: list[dict]
     call_flow_diagram: str
     data_flow_diagram: str
+    call_flow_fallback: bool
+    data_flow_fallback: bool
 
     # Final
     error: str | None
@@ -179,72 +184,221 @@ def node_chunk(state: AgentState) -> AgentState:
     return {**state, "chunks": chunks}
 
 
-def node_analyse(state: AgentState) -> AgentState:
-    """Step 3 — extract summary, files_used, business_rules from all chunks.
+def _validate_line_refs(rules: list[dict], total_lines: int) -> list[dict]:
+    """
+    Check each rule's line_ref against total_lines.
+    Clamps out-of-range numbers and sets line_ref_verified accordingly.
+    Accepts single numbers ("5") and ranges ("12-30").
+    """
+    validated = []
+    for rule in rules:
+        line_ref = str(rule.get("line_ref", "")).strip()
+        in_range = True
+        clamped_parts = []
+        for part in re.split(r"[\s,]+", line_ref):
+            # Each part may be "N" or "N-M"
+            range_match = re.fullmatch(r"(\d+)(?:-(\d+))?", part)
+            if range_match:
+                lo = int(range_match.group(1))
+                hi = int(range_match.group(2)) if range_match.group(2) else lo
+                if lo > total_lines or hi > total_lines:
+                    in_range = False
+                    lo = min(lo, total_lines)
+                    hi = min(hi, total_lines)
+                if range_match.group(2):
+                    clamped_parts.append(f"{lo}-{hi}")
+                else:
+                    clamped_parts.append(str(lo))
+            else:
+                clamped_parts.append(part)  # non-numeric — leave as-is
+        new_rule = dict(rule)
+        new_rule["line_ref_verified"] = in_range
+        if not in_range:
+            new_rule["line_ref"] = ", ".join(clamped_parts)
+        validated.append(new_rule)
+    return validated
 
-    For multi-chunk files we analyse each chunk and merge the results,
-    then do a final consolidation pass on the combined summary text.
+
+def node_analyse(state: AgentState) -> AgentState:
+    """Step 3 — three focused LLM calls: summary/files, business rules, observations.
+
+    For multi-chunk files we analyse each chunk and merge the results.
     """
     language = state["language"]
+    total_lines = state["line_count"]
     all_files: dict[str, dict] = {}   # keyed by file name to deduplicate
     all_rules: list[dict] = []
+    all_observations: list[dict] = []
     summaries: list[str] = []
 
     for chunk in state["chunks"]:
-        prompt = ANALYSE_PROMPT.format(language=language, source=chunk)
+        # Call 1 — summary + files_used
         try:
-            result = _llm_json(prompt)
+            summary_result = _llm_json(
+                ANALYSE_SUMMARY_PROMPT.format(language=language, source=chunk)
+            )
         except Exception as exc:
-            return {**state, "error": f"analyse step failed: {exc}"}
-
-        summaries.append(result.get("summary", ""))
-        for fu in result.get("files_used", []):
+            return {**state, "error": f"analyse (summary) step failed: {exc}"}
+        summaries.append(summary_result.get("summary", ""))
+        for fu in summary_result.get("files_used", []):
             all_files[fu.get("name", "")] = fu
-        all_rules.extend(result.get("business_rules", []))
+
+        # Call 2 — business rules
+        try:
+            rules_result = _llm_json(
+                ANALYSE_RULES_PROMPT.format(
+                    language=language, total_lines=total_lines, source=chunk
+                )
+            )
+        except Exception as exc:
+            return {**state, "error": f"analyse (rules) step failed: {exc}"}
+        all_rules.extend(rules_result.get("business_rules", []))
+
+        # Call 3 — observations
+        try:
+            obs_result = _llm_json(
+                ANALYSE_OBSERVATIONS_PROMPT.format(
+                    language=language, total_lines=total_lines, source=chunk
+                )
+            )
+        except Exception as exc:
+            return {**state, "error": f"analyse (observations) step failed: {exc}"}
+        all_observations.extend(obs_result.get("observations", []))
 
     # Combine summary sentences; deduplicate similar ones naively
     combined_summary = " ".join(s for s in summaries if s)[:1500]
+
+    # Validate + clamp line refs
+    validated_rules = _validate_line_refs(all_rules, total_lines)
 
     return {
         **state,
         "summary": combined_summary,
         "files_used": list(all_files.values()),
-        "business_rules": all_rules,
+        "business_rules": validated_rules,
+        "observations": all_observations,
     }
+
+
+# Regex for valid Mermaid graph lines: node defs and edges only (no subgraphs/styling)
+_MERMAID_LINE_RE = re.compile(
+    r"^\s*(?:"
+    r"[A-Za-z0-9_]+(?:\[.*?\]|(?:\(.*?\))|(?:\{.*?\}))?"        # node definition (optional label)
+    r"(?:\s*-->(?:\|.*?\|)?\s*[A-Za-z0-9_]+(?:\[.*?\]|(?:\(.*?\))|(?:\{.*?\})?)?)?"  # optional edge
+    r")\s*$"
+)
+
+
+def _validate_mermaid(diagram: str) -> tuple[bool, str]:
+    """
+    Validate that every non-empty, non-header line is a simple node/edge.
+    Returns (is_valid, first_error_message).
+    """
+    lines = diagram.strip().splitlines()
+    if not lines:
+        return False, "empty diagram"
+    header = lines[0].strip()
+    if not re.match(r"^graph\s+(TD|LR|RL|BT|TB)$", header):
+        return False, f"first line must be 'graph TD' or 'graph LR', got: {header!r}"
+    for line in lines[1:]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if not _MERMAID_LINE_RE.match(stripped):
+            return False, f"invalid Mermaid line: {stripped!r}"
+    return True, ""
+
+
+def _build_fallback_diagram(direction: str, prog_name: str, files_used: list[dict]) -> str:
+    """Build a minimal but valid Mermaid diagram from structured data."""
+    safe_name = re.sub(r"[^A-Za-z0-9_]", "_", prog_name) or "PROG"
+    lines = [f"graph {direction}", f'    {safe_name}["{prog_name}"]']
+    seen: set[str] = set()
+    for fu in files_used:
+        raw = fu.get("name", "")
+        node_id = re.sub(r"[^A-Za-z0-9_]", "_", raw) or "FILE"
+        if node_id in seen:
+            continue
+        seen.add(node_id)
+        mode = fu.get("mode", "")
+        label = f"{raw} ({mode})" if mode else raw
+        lines.append(f'    {node_id}["{label}"]')
+        if direction == "TD":
+            lines.append(f"    {safe_name} --> {node_id}")
+        else:
+            if mode in ("WRITE", "UPDATE", "DELETE"):
+                lines.append(f"    {safe_name} --> {node_id}")
+            else:
+                lines.append(f"    {node_id} --> {safe_name}")
+    return "\n".join(lines)
+
+
+def _llm_mermaid(prompt_text: str, key: str, retry_on_error: bool = True) -> tuple[str, bool]:
+    """
+    Call LLM for a Mermaid diagram. Validate; retry once on failure.
+    Returns (diagram_string, is_fallback).
+    """
+    try:
+        result = _llm_json(prompt_text)
+        diagram = result.get(key, "")
+        valid, err = _validate_mermaid(diagram)
+        if valid:
+            return diagram, False
+        if retry_on_error:
+            retry_prompt = (
+                prompt_text
+                + f"\n\nYour previous response failed validation. Error: {err}. "
+                "Try again, strictly following the format."
+            )
+            result2 = _llm_json(retry_prompt)
+            diagram2 = result2.get(key, "")
+            valid2, _ = _validate_mermaid(diagram2)
+            if valid2:
+                return diagram2, False
+    except Exception:
+        pass
+    return "", True  # signal caller to use fallback
 
 
 def node_diagram(state: AgentState) -> AgentState:
     """Step 4 — generate call-flow and data-flow Mermaid diagrams."""
     language = state["language"]
+    filename = state["filename"]
+    files_used = state.get("files_used", [])
     # Use only first chunk for diagram generation to stay within context limits
     source_head = state["chunks"][0] if state["chunks"] else state["source"]
     source_head_truncated = source_head[:4000]
 
+    prog_name = filename.rsplit(".", 1)[0] if "." in filename else filename
+
     # Call-flow diagram
-    call_flow = ""
-    try:
-        cf_result = _llm_json(CALL_FLOW_PROMPT.format(
-            language=language,
-            source=source_head_truncated,
-        ))
-        call_flow = cf_result.get("call_flow_diagram", "")
-    except Exception as exc:
-        call_flow = f"graph TD\n    ERROR[\"{exc}\"]"
+    cf_diagram, cf_fallback = _llm_mermaid(
+        CALL_FLOW_PROMPT.format(language=language, source=source_head_truncated),
+        key="call_flow_diagram",
+    )
+    if cf_fallback:
+        cf_diagram = _build_fallback_diagram("TD", prog_name, files_used)
 
     # Data-flow diagram
-    data_flow = ""
-    try:
-        files_used_text = json.dumps(state.get("files_used", []), indent=2)
-        df_result = _llm_json(DATA_FLOW_PROMPT.format(
+    files_used_text = json.dumps(files_used, indent=2)
+    df_diagram, df_fallback = _llm_mermaid(
+        DATA_FLOW_PROMPT.format(
             language=language,
             files_used=files_used_text,
             source_head=source_head_truncated[:2000],
-        ))
-        data_flow = df_result.get("data_flow_diagram", "")
-    except Exception as exc:
-        data_flow = f"graph LR\n    ERROR[\"{exc}\"]"
+        ),
+        key="data_flow_diagram",
+    )
+    if df_fallback:
+        df_diagram = _build_fallback_diagram("LR", prog_name, files_used)
 
-    return {**state, "call_flow_diagram": call_flow, "data_flow_diagram": data_flow}
+    return {
+        **state,
+        "call_flow_diagram": cf_diagram,
+        "data_flow_diagram": df_diagram,
+        "call_flow_fallback": cf_fallback,
+        "data_flow_fallback": df_fallback,
+    }
 
 
 def node_assemble(state: AgentState) -> AgentState:
@@ -300,8 +454,11 @@ def run_documentation_agent(filename: str, source: str) -> dict[str, Any]:
         "summary": "",
         "files_used": [],
         "business_rules": [],
+        "observations": [],
         "call_flow_diagram": "",
         "data_flow_diagram": "",
+        "call_flow_fallback": False,
+        "data_flow_fallback": False,
         "error": None,
     }
     final_state = get_graph().invoke(initial)

@@ -1,4 +1,4 @@
-import type { Job } from '../api/client'
+import type { Job, Observation } from '../api/client'
 
 interface Props { job: Job }
 
@@ -134,11 +134,51 @@ export default function DocView({ job }: Props) {
               <div key={i} style={{ borderLeft: '2px solid var(--accent-blue)', paddingLeft: '0.75rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                   <strong style={{ fontSize: '0.82rem' }}>{br.rule}</strong>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'var(--bg-raised)', padding: '0.1rem 0.4rem', borderRadius: 3 }}>
-                    Line {br.line_ref}
-                  </span>
+                  {br.line_ref_verified === false ? (
+                    <span
+                      title="line reference could not be verified"
+                      style={{ fontSize: '0.72rem', color: '#6b7280', background: 'var(--bg-raised)', padding: '0.1rem 0.4rem', borderRadius: 3, cursor: 'help' }}
+                    >
+                      Line {br.line_ref}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'var(--bg-raised)', padding: '0.1rem 0.4rem', borderRadius: 3 }}>
+                      Line {br.line_ref}
+                    </span>
+                  )}
                 </div>
                 <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>{br.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Observations */}
+      {docs.observations && docs.observations.length > 0 && (
+        <div className="section-card">
+          <div className="section-card-header">
+            <span className="section-card-title">🔍 Observations</span>
+            <span className="badge badge-blue">AI-GENERATED</span>
+          </div>
+          <div className="section-card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {docs.observations.map((obs: Observation, i: number) => (
+              <div key={i} style={{ borderLeft: '2px solid var(--border)', paddingLeft: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  {obs.severity === 'REVIEW' ? (
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '0.1rem 0.45rem', borderRadius: 3 }}>
+                      REVIEW
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', background: 'var(--bg-raised)', padding: '0.1rem 0.45rem', borderRadius: 3 }}>
+                      INFO
+                    </span>
+                  )}
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'var(--bg-raised)', padding: '0.1rem 0.4rem', borderRadius: 3 }}>
+                    Line {obs.line_ref}
+                  </span>
+                </div>
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>{obs.finding}</p>
               </div>
             ))}
           </div>

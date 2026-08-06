@@ -69,13 +69,14 @@ def run_doc_agent_task(self, job_id: str) -> None:
 
         # Persist documentation result
         doc = DocumentationResult(
-            job_id           = job_id,
-            summary          = agent_result.get("summary", ""),
-            call_flow_diagram= agent_result.get("call_flow_diagram", ""),
-            data_flow_diagram= agent_result.get("data_flow_diagram", ""),
-            files_used       = agent_result.get("files_used", []),
-            business_rules   = agent_result.get("business_rules", []),
-            raw_agent_output = {
+            job_id            = job_id,
+            summary           = agent_result.get("summary", ""),
+            call_flow_diagram = agent_result.get("call_flow_diagram", ""),
+            data_flow_diagram = agent_result.get("data_flow_diagram", ""),
+            files_used        = agent_result.get("files_used", []),
+            business_rules    = agent_result.get("business_rules", []),
+            observations      = agent_result.get("observations", []),
+            raw_agent_output  = {
                 k: v for k, v in agent_result.items()
                 if k not in ("source", "chunks")  # don't store large text blobs twice
             },

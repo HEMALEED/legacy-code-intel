@@ -5,6 +5,8 @@ import MermaidDiagram from './MermaidDiagram'
 
 type Tab = 'documentation' | 'callflow' | 'dataflow' | 'source' | 'raw'
 
+const isDev = new URLSearchParams(window.location.search).get('dev') === '1'
+
 interface Props {
   jobId: string
 }
@@ -59,8 +61,19 @@ export default function MainPanel({ jobId }: Props) {
     { key: 'callflow',      label: '■ Call Flow' },
     { key: 'dataflow',      label: '◐ Data Flow' },
     { key: 'source',        label: '{ } Source' },
-    { key: 'raw',           label: '≡ Raw JSON' },
+    ...(isDev ? [{ key: 'raw' as Tab, label: '≡ Raw JSON' }] : []),
   ]
+
+  function handleExport() {
+    if (!docs) return
+    const blob = new Blob([JSON.stringify(docs, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${filename}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%' }}>
@@ -75,6 +88,14 @@ export default function MainPanel({ jobId }: Props) {
         <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: job.status === 'completed' ? 'var(--accent-green)' : job.status === 'failed' ? 'var(--accent-red)' : 'var(--accent-blue)' }}>
           ● {job.status.toUpperCase()}
         </span>
+        {docs && (
+          <button
+            onClick={handleExport}
+            style={{ marginLeft: '0.5rem', fontSize: '0.72rem', padding: '0.2rem 0.6rem', borderRadius: 3, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+          >
+            ↓ Export
+          </button>
+        )}
       </div>
 
       {/* Tab bar */}
@@ -93,7 +114,10 @@ export default function MainPanel({ jobId }: Props) {
         {tab === 'callflow' && (
           <div style={{ padding: '1rem' }}>
             {docs?.call_flow_diagram
-              ? <MermaidDiagram source={docs.call_flow_diagram} />
+              ? <MermaidDiagram
+                  source={docs.call_flow_diagram}
+                  fallback={!!(docs.raw_agent_output?.call_flow_fallback)}
+                />
               : <p style={{ color: 'var(--text-muted)', padding: '2rem', textAlign: 'center' }}>No call flow diagram available.</p>
             }
           </div>
@@ -102,7 +126,10 @@ export default function MainPanel({ jobId }: Props) {
         {tab === 'dataflow' && (
           <div style={{ padding: '1rem' }}>
             {docs?.data_flow_diagram
-              ? <MermaidDiagram source={docs.data_flow_diagram} />
+              ? <MermaidDiagram
+                  source={docs.data_flow_diagram}
+                  fallback={!!(docs.raw_agent_output?.data_flow_fallback)}
+                />
               : <p style={{ color: 'var(--text-muted)', padding: '2rem', textAlign: 'center' }}>No data flow diagram available.</p>
             }
           </div>

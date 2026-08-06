@@ -24,20 +24,51 @@ interface Props {
 
 // Try to auto-fix common LLM mistakes in Mermaid output
 function sanitizeMermaid(src: string): string {
-  return src
-    .trim()
-    // Remove accidental markdown fences
-    .replace(/^```[a-z]*\n?/i, '')
-    .replace(/```$/,            '')
-    // Fix capitalised keywords that Mermaid requires lowercase
-    .replace(/\bSubgraph\b/g,  'subgraph')
-    .replace(/\bEnd\b/g,       'end')
-    .replace(/\bGraph\b/g,     'graph')
-    .replace(/\bFlowchart\b/g, 'flowchart')
-    .replace(/\bSequenceDiagram\b/g, 'sequenceDiagram')
-    // Fix arrow syntax: --> with label should be -->|label|
-    .replace(/--([a-zA-Z])/g, '-- $1')
-    .trim()
+  let s = src.trim()
+
+  // 1. Strip markdown fences (opening fence may have a language tag,
+  //    closing fence may be inline at end of last content line e.g. "main```")
+  s = s.replace(/^```[a-z]*\r?\n?/i, '')  // opening fence
+  s = s.replace(/```\s*$/, '')             // closing fence (inline or own line)
+
+  // 2. Fix capitalised keywords Mermaid requires lowercase
+  s = s.replace(/\bSubgraph\b/g, 'subgraph')
+  s = s.replace(/\bEnd\b/g,      'end')
+  s = s.replace(/\bGraph\b/g,    'graph')
+  s = s.replace(/\bFlowchart\b/g,'flowchart')
+  s = s.replace(/\bSequenceDiagram\b/g, 'sequenceDiagram')
+
+  // 3. Fix invalid custom arrows: --read->, --write-> etc. → -->|read|
+  //    Must run BEFORE colon-label fix so the arrow token is clean first
+  s = s.replace(/--([a-zA-Z][a-zA-Z0-9]*)-->/g, '-->|$1|')   // --read--> variant
+  s = s.replace(/--([a-zA-Z][a-zA-Z0-9]*)->/g,  '-->|$1|')   // --read-> variant
+
+  // 4. Fix subgraph curly-brace syntax line by line:
+  //    "subgraph devOpsMenu{" → "subgraph devOpsMenu"
+  //    A lone "}" line that closed a curly-brace subgraph → "end"
+  s = s.split('\n').map(line => {
+    // subgraph NAME{ or subgraph NAME { → strip the brace
+    if (/^\s*subgraph\s+\S.*\{/.test(line)) {
+      return line.replace(/\{.*$/, '').trimEnd()
+    }
+    // lone closing brace line → end
+    if (/^\s*\}\s*$/.test(line)) {
+      return line.replace('}', 'end')
+    }
+    return line
+  }).join('\n')
+
+  // 5. Fix trailing colon on node IDs: "main --> SQL_OPEN:" → "main --> SQL_OPEN"
+  //    A bare word followed by colon at end of line or before newline is invalid
+  s = s.replace(/([A-Za-z0-9_]+):\s*$/gm, '$1')
+
+  // 6. Quote unquoted node labels that contain colons (invalid bare in Mermaid)
+  //    Pattern: NODEID: Some Text  →  NODEID["Some Text"]
+  //    Only applies inside arrow targets, e.g. "-->|label| NODEID: Text"
+  s = s.replace(/(-->(?:\|[^|]*\|)?\s*)([A-Za-z0-9_]+):\s*([^\n]+)/g,
+    (_m, arrow, id, label) => `${arrow}${id}["${label.trim()}"]`)
+
+  return s.trim()
 }
 
 export default function MermaidDiagram({ source }: Props) {

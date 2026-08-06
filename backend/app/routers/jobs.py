@@ -1,8 +1,9 @@
 """
 Jobs router — handles:
-  POST /api/jobs          upload files or ZIP, create job, enqueue agent
-  GET  /api/jobs          list all jobs (newest first)
-  GET  /api/jobs/{job_id} get job + documentation result
+  POST   /api/jobs          upload files or ZIP, create job, enqueue agent
+  GET    /api/jobs          list all jobs (newest first)
+  GET    /api/jobs/{job_id} get job + documentation result
+  DELETE /api/jobs/{job_id} delete a job and its uploaded files from disk
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import Job, JobStatus, SourceFile
 from app.schemas import JobCreatedOut, JobOut
-from app.storage import make_storage_key, save_file
+from app.storage import make_storage_key, save_file, delete_job_files
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -136,3 +137,14 @@ def get_job(job_id: UUID, db: Session = Depends(get_db)):
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
     return job
+
+
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_job(job_id: UUID, db: Session = Depends(get_db)):
+    """Delete a job, its DB rows (cascade), and its uploaded files from disk."""
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    delete_job_files(str(job_id))
+    db.delete(job)
+    db.commit()

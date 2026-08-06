@@ -71,3 +71,8 @@ export async function getJob(jobId: string): Promise<Job> {
   if (!res.ok) throw new Error('Job not found')
   return res.json()
 }
+
+export async function deleteJob(jobId: string): Promise<void> {
+  const res = await fetch(`/api/jobs/${jobId}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete job')
+}

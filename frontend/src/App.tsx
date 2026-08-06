@@ -101,6 +101,7 @@ export default function App() {
           selectedId={selectedJob?.id ?? null}
           onSelect={setSelectedJob}
           onUploadClick={() => fileInputRef.current?.click()}
+          onDelete={(jobId) => { if (selectedJob?.id === jobId) setSelectedJob(null) }}
           refreshTick={refreshTick}
         />
 

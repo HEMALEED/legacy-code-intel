@@ -68,6 +68,13 @@ Respond ONLY with a valid JSON object — no markdown fences, no explanation, no
 Given this {language} program, produce a Mermaid flowchart showing the call flow
 (main routine → subroutines / subprocedures → external program calls).
 
+STRICT Mermaid syntax rules you MUST follow:
+- Start with exactly: graph TD
+- Use only valid arrows: --> or -- label --> or -->|label|  — never --read->, --write->, or any custom arrow variant.
+- Subgraphs must use the keyword form: subgraph Title ... end  (NOT curly braces)
+- Node labels containing spaces or special characters must be quoted: A["My Label"]
+- Do NOT wrap the diagram in markdown fences.
+
 Return a JSON object with ONE key:
 {{
   "call_flow_diagram": "<complete Mermaid graph TD source, no fences>"
@@ -85,6 +92,13 @@ Respond ONLY with a valid JSON object — no markdown fences, no explanation, no
 
 Given this {language} program and its file usage list below, produce a Mermaid
 flowchart showing how data moves through the program (inputs → processing → outputs).
+
+STRICT Mermaid syntax rules you MUST follow:
+- Start with exactly: graph LR
+- Use only valid arrows: --> or -- label --> or -->|label|  — never --read->, --write->, or any custom arrow variant.
+- Subgraphs must use the keyword form: subgraph Title ... end  (NOT curly braces)
+- Node labels containing spaces or special characters must be quoted: A["My Label"]
+- Do NOT wrap the diagram in markdown fences.
 
 Return a JSON object with ONE key:
 {{

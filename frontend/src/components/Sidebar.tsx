@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { listJobs, type Job } from '../api/client'
+import { listJobs, deleteJob, type Job } from '../api/client'
 
 interface Props {
   selectedId: string | null
   onSelect: (job: Job) => void
   onUploadClick: () => void
+  onDelete: (jobId: string) => void
   refreshTick: number
 }
 
@@ -41,9 +42,26 @@ function inferLibrary(lang: string | null): string {
   }
 }
 
-export default function Sidebar({ selectedId, onSelect, refreshTick }: Omit<Props, 'onUploadClick'> & { onUploadClick?: () => void }) {
+export default function Sidebar({ selectedId, onSelect, onDelete, refreshTick }: Omit<Props, 'onUploadClick'> & { onUploadClick?: () => void }) {
   const [jobs, setJobs] = useState<Job[]>([])
   const [navItem, setNavItem] = useState<'documentation' | 'diagrams'>('documentation')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+
+  const handleDelete = async (e: React.MouseEvent, jobId: string) => {
+    e.stopPropagation()   // don't select the job when clicking delete
+    if (!window.confirm('Delete this job and its files?')) return
+    setDeletingId(jobId)
+    try {
+      await deleteJob(jobId)
+      setJobs(prev => prev.filter(j => j.id !== jobId))
+      onDelete(jobId)
+    } catch {
+      alert('Failed to delete job.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -114,11 +132,16 @@ export default function Sidebar({ selectedId, onSelect, refreshTick }: Omit<Prop
               const f = job.files[0]
               if (!f) return null
               const selected = selectedId === job.id
+              const hovered = hoveredId === job.id
+              const deleting = deletingId === job.id
               return (
-                <div key={job.id} onClick={() => onSelect(job)}
+                <div key={job.id}
+                  onClick={() => onSelect(job)}
+                  onMouseEnter={() => setHoveredId(job.id)}
+                  onMouseLeave={() => setHoveredId(null)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '0.5rem',
-                    padding: '0.3rem 1rem 0.3rem 1.25rem',
+                    padding: '0.3rem 0.5rem 0.3rem 1.25rem',
                     cursor: 'pointer',
                     background: selected ? 'var(--bg-hover)' : 'transparent',
                     borderLeft: selected ? '2px solid var(--accent-blue)' : '2px solid transparent',
@@ -128,6 +151,22 @@ export default function Sidebar({ selectedId, onSelect, refreshTick }: Omit<Prop
                   <span className="truncate" style={{ fontSize: '0.78rem', color: selected ? 'var(--text-primary)' : 'var(--text-secondary)', flex: 1 }}>
                     {f.filename}
                   </span>
+                  {(hovered || deleting) && (
+                    <button
+                      onClick={e => handleDelete(e, job.id)}
+                      disabled={deleting}
+                      title="Delete job"
+                      style={{
+                        flexShrink: 0,
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: 'var(--accent-red, #f05353)',
+                        fontSize: '0.75rem', padding: '0 0.2rem',
+                        opacity: deleting ? 0.5 : 1,
+                      }}
+                    >
+                      {deleting ? '…' : '✕'}
+                    </button>
+                  )}
                 </div>
               )
             })}

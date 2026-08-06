@@ -42,7 +42,8 @@ def _build_llm():
             url=settings.watsonx_url,
             apikey=settings.watsonx_api_key,
             project_id=settings.watsonx_project_id,
-            params={"max_new_tokens": 4096, "temperature": 0},
+            max_new_tokens=4096,   # langchain-ibm >=0.3 — top-level args, not params={}
+            temperature=0,
         )
     if settings.llm_provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
@@ -149,10 +150,14 @@ def _extract_json(raw: str) -> dict:
 def _llm_json(prompt_text: str) -> dict:
     """Call the LLM with a JSON-mode prompt and return parsed dict."""
     llm = get_llm()
-    messages = [
-        SystemMessage(content=SYSTEM_ROLE),
-        HumanMessage(content=prompt_text),
-    ]
+    if settings.llm_provider == "watsonx":
+        # Granite does not honour SystemMessage; fold the system role into the human turn
+        messages = [HumanMessage(content=f"{SYSTEM_ROLE}\n\n{prompt_text}")]
+    else:
+        messages = [
+            SystemMessage(content=SYSTEM_ROLE),
+            HumanMessage(content=prompt_text),
+        ]
     response = llm.invoke(messages)
     raw = response.content if hasattr(response, "content") else str(response)
     logger.debug("LLM raw response (first 300 chars): %s", raw[:300])

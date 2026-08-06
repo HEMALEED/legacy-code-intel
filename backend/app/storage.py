@@ -42,3 +42,12 @@ def read_file_sync(storage_key: str) -> bytes:
     if settings.storage_backend == "local":
         return (Path(settings.storage_local_root) / storage_key).read_bytes()
     raise NotImplementedError("S3 backend not yet wired — set STORAGE_BACKEND=local for MVP")
+
+
+def delete_job_files(job_id: str) -> None:
+    """Delete the upload folder for a job from local disk (best-effort)."""
+    if settings.storage_backend == "local":
+        import shutil
+        job_dir = Path(settings.storage_local_root) / job_id
+        if job_dir.exists():
+            shutil.rmtree(job_dir)

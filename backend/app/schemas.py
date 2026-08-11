@@ -17,14 +17,14 @@ class FileUsed(BaseModel):
 class BusinessRule(BaseModel):
     rule: str
     line_ref: str
-    description: str
+    description: str = ""
     line_ref_verified: bool = True
 
 
 class Observation(BaseModel):
     finding: str
-    line_ref: str
-    severity: str  # REVIEW | INFO
+    line_ref: str = ""
+    severity: str = "REVIEW"  # REVIEW | INFO
 
 
 # ─── Documentation result ─────────────────────────────────────────────────────

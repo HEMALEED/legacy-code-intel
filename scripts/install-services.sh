@@ -46,7 +46,7 @@ Type=simple
 User=$USER
 WorkingDirectory=$PROJECT/backend
 Environment="PATH=$VENV/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=$VENV/bin/celery -A celery_worker worker --loglevel=info
+ExecStart=$VENV/bin/celery -A celery_worker worker --loglevel=info --concurrency=2
 Restart=always
 RestartSec=10
 StandardOutput=journal

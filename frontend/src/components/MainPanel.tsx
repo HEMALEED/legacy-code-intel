@@ -66,11 +66,119 @@ export default function MainPanel({ jobId }: Props) {
 
   function handleExport() {
     if (!docs) return
-    const blob = new Blob([JSON.stringify(docs, null, 2)], { type: 'application/json' })
+
+    const generatedAt = new Date().toLocaleString()
+    const modeColor = (m: string) =>
+      ({ READ: '#166534', WRITE: '#991b1b', UPDATE: '#92400e', DELETE: '#991b1b' }[m.toUpperCase()] ?? '#374151')
+    const modeBg = (m: string) =>
+      ({ READ: '#dcfce7', WRITE: '#fee2e2', UPDATE: '#fef3c7', DELETE: '#fee2e2' }[m.toUpperCase()] ?? '#f3f4f6')
+
+    const rulesHtml = (docs.business_rules ?? []).map(br => `
+      <div class="rule">
+        <div class="rule-header">
+          <strong>${br.rule}</strong>
+          <span class="line-ref ${br.line_ref_verified === false ? 'unverified' : ''}"
+                title="${br.line_ref_verified === false ? 'line reference could not be verified' : ''}">
+            Line ${br.line_ref}${br.line_ref_verified === false ? ' ⚠' : ''}
+          </span>
+        </div>
+        <p>${br.description}</p>
+      </div>`).join('')
+
+    const obsHtml = (docs.observations ?? []).map(o => `
+      <div class="obs">
+        <span class="badge ${o.severity === 'REVIEW' ? 'badge-review' : 'badge-info'}">${o.severity}</span>
+        <span class="line-ref">Line ${o.line_ref}</span>
+        <span class="obs-finding">${o.finding}</span>
+      </div>`).join('')
+
+    const filesHtml = (docs.files_used ?? []).map(f => `
+      <tr>
+        <td><code>${f.name}</code></td>
+        <td><span style="color:${modeColor(f.mode)};background:${modeBg(f.mode)};padding:1px 6px;border-radius:3px;font-size:11px;font-weight:700">${f.mode.toUpperCase()}</span></td>
+        <td>${f.description}</td>
+      </tr>`).join('')
+
+    const diagSection = (title: string, diagram: string) =>
+      diagram ? `<h2>${title}</h2><pre class="diagram">${diagram}</pre>` : ''
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LegacyLens — ${filename}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system,"Segoe UI",system-ui,sans-serif; font-size: 14px;
+         line-height: 1.6; color: #1f2328; background: #fff; padding: 40px; max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 4px; }
+  h2 { font-size: 1rem; font-weight: 700; margin: 28px 0 10px;
+       padding-bottom: 6px; border-bottom: 2px solid #e5e7eb; color: #374151; }
+  .meta { font-size: 0.78rem; color: #6b7280; margin-bottom: 24px; }
+  .badge { display:inline-block; font-size:11px; font-weight:700; padding:2px 6px;
+           border-radius:3px; margin-right:6px; }
+  .badge-ai { background:#dbeafe; color:#1e40af; }
+  .badge-review { background:#fef3c7; color:#92400e; }
+  .badge-info   { background:#f3f4f6; color:#6b7280; }
+  table { width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:8px; }
+  th { text-align:left; padding:6px 10px; background:#f9fafb; border-bottom:2px solid #e5e7eb;
+       font-size:0.75rem; text-transform:uppercase; letter-spacing:0.04em; color:#6b7280; }
+  td { padding:6px 10px; border-bottom:1px solid #e5e7eb; vertical-align:top; }
+  tr:last-child td { border-bottom:none; }
+  code { font-family:"Cascadia Code","Fira Code",monospace; font-size:0.85em; background:#f3f4f6; padding:1px 4px; border-radius:3px; }
+  .rule { border-left:3px solid #3b82f6; padding:6px 0 6px 12px; margin-bottom:10px; }
+  .rule-header { display:flex; align-items:center; gap:10px; margin-bottom:2px; }
+  .line-ref { font-size:0.75rem; color:#6b7280; background:#f3f4f6; padding:1px 6px; border-radius:3px; }
+  .line-ref.unverified { color:#9ca3af; text-decoration:line-through; }
+  .obs { display:flex; align-items:baseline; gap:8px; padding:5px 0;
+         border-bottom:1px solid #f3f4f6; font-size:0.85rem; }
+  .obs-finding { flex:1; }
+  .summary-text { background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px;
+                  padding:12px 16px; line-height:1.7; color:#374151; }
+  .diagram { font-family:"Cascadia Code","Fira Code",monospace; font-size:0.78rem;
+             background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px;
+             padding:14px; white-space:pre-wrap; word-break:break-word; color:#374151; }
+  .footer { margin-top:40px; padding-top:12px; border-top:1px solid #e5e7eb;
+            font-size:0.72rem; color:#9ca3af; text-align:center; }
+  @media print { body { padding:20px; } }
+</style>
+</head>
+<body>
+  <h1>${filename}</h1>
+  <div class="meta">
+    Language: <strong>${lang || '—'}</strong> &nbsp;·&nbsp;
+    Size: <strong>${files[0] ? (files[0].size_bytes / 1024).toFixed(1) + ' KB' : '—'}</strong> &nbsp;·&nbsp;
+    Generated: <strong>${generatedAt}</strong> &nbsp;·&nbsp;
+    <span class="badge badge-ai">AI-GENERATED</span>
+  </div>
+
+  ${docs.summary ? `<h2>Summary</h2><div class="summary-text">${docs.summary}</div>` : ''}
+
+  ${(docs.files_used ?? []).length > 0 ? `
+  <h2>DB2 Tables / Files Used</h2>
+  <table>
+    <thead><tr><th>Name</th><th>Mode</th><th>Description</th></tr></thead>
+    <tbody>${filesHtml}</tbody>
+  </table>` : ''}
+
+  ${(docs.business_rules ?? []).length > 0 ? `
+  <h2>Business Rules</h2>${rulesHtml}` : ''}
+
+  ${(docs.observations ?? []).length > 0 ? `
+  <h2>Observations</h2>${obsHtml}` : ''}
+
+  ${diagSection('Call Flow Diagram (Mermaid source)', docs.call_flow_diagram ?? '')}
+  ${diagSection('Data Flow Diagram (Mermaid source)', docs.data_flow_diagram ?? '')}
+
+  <div class="footer">Generated by LegacyLens &nbsp;·&nbsp; ${generatedAt}</div>
+</body>
+</html>`
+
+    const blob = new Blob([html], { type: 'text/html' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${filename}.json`
+    a.download = `${filename}-documentation.html`
     a.click()
     URL.revokeObjectURL(url)
   }

@@ -17,6 +17,34 @@ function ModeChip({ mode }: { mode: string }) {
   )
 }
 
+// Determine object type label based on language
+function objectTypeLabel(lang: string | null): { header: string; nameCol: string; typeCol: string } {
+  switch (lang) {
+    case 'DDS':
+      // Distinguish by filename extension
+      return { header: '▶ Object Header', nameCol: 'Object Name', typeCol: 'Object Type' }
+    case 'CLLE': case 'CLP':
+      return { header: '▶ CL Program Header', nameCol: 'Program Name', typeCol: 'Type' }
+    case 'COBOL':
+      return { header: '▶ COBOL Program Header', nameCol: 'Program Name', typeCol: 'Type' }
+    default:
+      return { header: '▶ Program Header', nameCol: 'Program Name', typeCol: 'Type' }
+  }
+}
+
+// Determine object type from extension
+function objectType(filename: string, lang: string | null): string {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? ''
+  switch (ext) {
+    case 'pf':   return 'Physical File (DB2 Table)'
+    case 'lf':   return 'Logical File (DB2 View)'
+    case 'dspf': return 'Display File'
+    case 'prtf': return 'Printer File'
+    case 'dds':  return 'DDS Source'
+    default:     return lang ?? '—'
+  }
+}
+
 export default function DocView({ job }: Props) {
   const { docs, error, status, files } = job
   const f = files[0]
@@ -49,35 +77,39 @@ export default function DocView({ job }: Props) {
   return (
     <div style={{ padding: '1rem 1.25rem', overflowY: 'auto', height: '100%' }}>
 
-      {/* Program header */}
-      <div className="section-card">
-        <div className="section-card-header">
-          <span className="section-card-title">▶ Program Header</span>
-          <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span className="badge badge-blue">AI-GENERATED</span>
-          </span>
-        </div>
-        <div className="section-card-body">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Program Name</th>
-                <th>Type</th>
-                <th>Language</th>
-                <th>Size</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><code>{f?.filename ?? '—'}</code></td>
-                <td>{f?.language ?? '—'}</td>
-                <td>{f?.language ?? '—'}</td>
-                <td>{f ? `${(f.size_bytes / 1024).toFixed(1)} KB` : '—'}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Object/Program header */}
+      {(() => {
+        const labels = objectTypeLabel(f?.language ?? null)
+        const type   = objectType(f?.filename ?? '', f?.language ?? null)
+        return (
+          <div className="section-card">
+            <div className="section-card-header">
+              <span className="section-card-title">{labels.header}</span>
+              <span className="badge badge-blue">AI-GENERATED</span>
+            </div>
+            <div className="section-card-body">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>{labels.nameCol}</th>
+                    <th>{labels.typeCol}</th>
+                    <th>Language</th>
+                    <th>Size</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>{f?.filename ?? '—'}</code></td>
+                    <td>{type}</td>
+                    <td>{f?.language ?? '—'}</td>
+                    <td>{f ? `${(f.size_bytes / 1024).toFixed(1)} KB` : '—'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Summary */}
       {docs.summary && (

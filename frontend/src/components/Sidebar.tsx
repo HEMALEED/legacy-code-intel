@@ -31,14 +31,24 @@ function langColor(lang: string | null) {
   return LANG_COLORS[lang ?? 'UNKNOWN'] ?? '#555a72'
 }
 
-// Group jobs by library inferred from filename (e.g. "SRCCHKOUT.sqlrpgle" → "QRPGLESRC")
-function inferLibrary(lang: string | null): string {
+// Group jobs by library — use filename extension first, fall back to detected language
+function inferLibrary(lang: string | null, filename: string): string {
+  const ext = filename.includes('.') ? filename.split('.').pop()!.toLowerCase() : ''
+  switch (ext) {
+    case 'rpgle': case 'sqlrpgle': case 'rpg': return 'QRPGLESRC'
+    case 'cbl': case 'cob': case 'cobol':      return 'QCBLSRC'
+    case 'clle': case 'clp':                   return 'QCLSRC'
+    case 'dds': case 'pf': case 'lf':
+    case 'prtf': case 'dspf':                  return 'QDDSSRC'
+    default: break
+  }
+  // Fall back to detected language
   switch (lang) {
     case 'RPGLE': case 'SQLRPGLE': case 'RPG': return 'QRPGLESRC'
     case 'COBOL': return 'QCBLSRC'
     case 'CLLE':  case 'CLP': return 'QCLSRC'
     case 'DDS':   return 'QDDSSRC'
-    default:      return 'OTHER'
+    default:      return 'QRPGLESRC'  // default most IBM i files to QRPGLESRC
   }
 }
 
@@ -71,10 +81,14 @@ export default function Sidebar({ selectedId, onSelect, onDelete, refreshTick }:
     return () => { active = false; clearInterval(id) }
   }, [refreshTick])
 
-  // Group by library
-  const byLib = jobs.reduce<Record<string, Job[]>>((acc, job) => {
-    const lang = job.files[0]?.language ?? null
-    const lib  = inferLibrary(lang)
+  // Group by library — deduplicate by job id first
+  const seen = new Set<string>()
+  const uniqueJobs = jobs.filter(j => { if (seen.has(j.id)) return false; seen.add(j.id); return true })
+
+  const byLib = uniqueJobs.reduce<Record<string, Job[]>>((acc, job) => {
+    const lang     = job.files[0]?.language ?? null
+    const filename = job.files[0]?.filename ?? ''
+    const lib      = inferLibrary(lang, filename)
     ;(acc[lib] ??= []).push(job)
     return acc
   }, {})

@@ -10,8 +10,8 @@ from pydantic import BaseModel
 
 class FileUsed(BaseModel):
     name: str
-    mode: str           # READ | WRITE | UPDATE | DELETE
-    description: str
+    mode: str = ""          # READ | WRITE | UPDATE | DELETE
+    description: str = ""   # optional — old DB rows may omit this
 
 
 from pydantic import field_validator

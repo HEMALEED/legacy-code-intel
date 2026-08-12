@@ -44,9 +44,14 @@ Respond ONLY with a valid JSON object — no markdown fences, no explanation, no
 
 Analyse the following {language} source code.
 
+IMPORTANT TERMINOLOGY:
+- If the source is DDS (extension .pf, .lf, .dspf, .prtf), it is a FILE DEFINITION not a program.
+  Use "This physical file / logical file / display file defines..." NOT "This program..."
+- If the source is RPGLE, SQLRPGLE, COBOL, CLP, CLLE, it IS a program. Use "This program..."
+
 Return a JSON object with EXACTLY these keys:
 {{
-  "summary": "<2-4 sentence plain-English explanation of what this program does>",
+  "summary": "<2-4 sentence plain-English explanation of what this object does>",
   "files_used": [
     {{"name": "<file or table name>", "mode": "<READ|WRITE|UPDATE|DELETE>", "description": "<one sentence>"}}
   ]

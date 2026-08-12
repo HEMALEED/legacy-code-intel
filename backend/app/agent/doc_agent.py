@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import textwrap
 from typing import Any, TypedDict
 
 logger = logging.getLogger(__name__)
@@ -23,13 +22,10 @@ logger = logging.getLogger(__name__)
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agent.prompts import (
-    ANALYSE_SUMMARY_PROMPT,
-    ANALYSE_RULES_PROMPT,
-    ANALYSE_OBSERVATIONS_PROMPT,
-    CALL_FLOW_PROMPT,
-    DATA_FLOW_PROMPT,
     SYSTEM_ROLE,
     detect_language,
+    get_prompts,
+    is_dds,
 )
 from app.config import settings
 
@@ -172,10 +168,17 @@ def _llm_json(prompt_text: str) -> dict:
 # ── Graph nodes ───────────────────────────────────────────────────────────────
 
 def node_parse(state: AgentState) -> AgentState:
-    """Step 1 — detect language and count lines."""
+    """Step 1 — detect language and count lines.
+
+    Normalises CRLF → LF before counting so Windows-saved files don't
+    report double the real line count.  The normalised source is stored
+    back into state so every downstream step sees consistent line numbers.
+    """
+    # Normalise line endings once; all subsequent processing uses this copy
+    source = state["source"].replace("\r\n", "\n").replace("\r", "\n")
     language = detect_language(state["filename"])
-    line_count = state["source"].count("\n") + 1
-    return {**state, "language": language, "line_count": line_count}
+    line_count = source.count("\n") + 1
+    return {**state, "source": source, "language": language, "line_count": line_count}
 
 
 def node_chunk(state: AgentState) -> AgentState:
@@ -187,7 +190,8 @@ def node_chunk(state: AgentState) -> AgentState:
 def _validate_line_refs(rules: list[dict], total_lines: int) -> list[dict]:
     """
     Check each rule's line_ref against total_lines.
-    Clamps out-of-range numbers and sets line_ref_verified accordingly.
+    Clamps out-of-range numbers (1 ≤ start ≤ end ≤ total_lines) and sets
+    line_ref_verified accordingly.
     Accepts single numbers ("5") and ranges ("12-30").
     """
     validated = []
@@ -201,10 +205,11 @@ def _validate_line_refs(rules: list[dict], total_lines: int) -> list[dict]:
             if range_match:
                 lo = int(range_match.group(1))
                 hi = int(range_match.group(2)) if range_match.group(2) else lo
-                if lo > total_lines or hi > total_lines:
+                # Enforce: 1 ≤ lo ≤ hi ≤ total_lines
+                if lo < 1 or hi < 1 or lo > total_lines or hi > total_lines:
                     in_range = False
-                    lo = min(lo, total_lines)
-                    hi = min(hi, total_lines)
+                    lo = max(1, min(lo, total_lines))
+                    hi = max(lo, min(hi, total_lines))  # hi must not go below clamped lo
                 if range_match.group(2):
                     clamped_parts.append(f"{lo}-{hi}")
                 else:
@@ -223,9 +228,11 @@ def node_analyse(state: AgentState) -> AgentState:
     """Step 3 — three focused LLM calls: summary/files, business rules, observations.
 
     For multi-chunk files we analyse each chunk and merge the results.
+    Uses per-language PromptSet so DDS files get DDS-guarded prompts.
     """
     language = state["language"]
     total_lines = state["line_count"]
+    prompts = get_prompts(language)
     all_files: dict[str, dict] = {}   # keyed by file name to deduplicate
     all_rules: list[dict] = []
     all_observations: list[dict] = []
@@ -235,7 +242,7 @@ def node_analyse(state: AgentState) -> AgentState:
         # Call 1 — summary + files_used
         try:
             summary_result = _llm_json(
-                ANALYSE_SUMMARY_PROMPT.format(language=language, source=chunk)
+                prompts.analyse_prompt.format(language=language, source=chunk)
             )
         except Exception as exc:
             return {**state, "error": f"analyse (summary) step failed: {exc}"}
@@ -246,7 +253,7 @@ def node_analyse(state: AgentState) -> AgentState:
         # Call 2 — business rules
         try:
             rules_result = _llm_json(
-                ANALYSE_RULES_PROMPT.format(
+                prompts.rules_prompt.format(
                     language=language, total_lines=total_lines, source=chunk
                 )
             )
@@ -257,7 +264,7 @@ def node_analyse(state: AgentState) -> AgentState:
         # Call 3 — observations (non-fatal: bad JSON just gives empty list)
         try:
             obs_result = _llm_json(
-                ANALYSE_OBSERVATIONS_PROMPT.format(
+                prompts.observations_prompt.format(
                     language=language, total_lines=total_lines, source=chunk
                 )
             )
@@ -333,6 +340,73 @@ def _build_fallback_diagram(direction: str, prog_name: str, files_used: list[dic
     return "\n".join(lines)
 
 
+def _build_dds_diagram(direction: str, filename: str, source: str) -> str:
+    """
+    Build a deterministic Mermaid diagram for DDS physical/logical files.
+
+    Call-flow (TD): fileName --> recordFormat --> keyField1, keyField2, ...
+    Data-flow (LR): same layout, showing data fields feeding the record.
+
+    Parses only the R (record format) and K (key field) lines from the DDS source.
+    Falls back to a single-node diagram if nothing can be parsed.
+    """
+    file_node = re.sub(r"[^A-Za-z0-9_]", "_", filename.rsplit(".", 1)[0]) or "FILE"
+    file_label = filename.rsplit(".", 1)[0] if "." in filename else filename
+
+    # --- Parse record format name (first R line, cols 19-28 in fixed DDS or free-form)
+    rec_format = None
+    for line in source.splitlines():
+        # Fixed-format DDS: col 17 = 'R', record name in cols 19-28 (0-indexed: 18-27)
+        stripped = line.strip()
+        # Try the fixed-format column pattern first
+        if len(line) >= 20 and line[16:17].upper() == "R" and line[18:19].strip():
+            rec_format = line[18:28].strip()
+            break
+        # Also accept free-form  "A  R  RECNAME"
+        m = re.match(r"^A\s+R\s+(\w+)", stripped, re.IGNORECASE)
+        if m:
+            rec_format = m.group(1)
+            break
+
+    if not rec_format:
+        rec_format = "RECFMT"
+
+    rec_node = re.sub(r"[^A-Za-z0-9_]", "_", rec_format) or "RECFMT"
+
+    # --- Parse key fields (K lines)
+    key_fields: list[str] = []
+    seen_keys: set[str] = set()
+    for line in source.splitlines():
+        stripped = line.strip()
+        # Fixed-format: col 17 = 'K'
+        if len(line) >= 20 and line[16:17].upper() == "K" and line[18:19].strip():
+            kf = line[18:28].strip()
+            if kf and kf not in seen_keys:
+                key_fields.append(kf)
+                seen_keys.add(kf)
+            continue
+        # Free-form  "A  K  FIELDNAME"
+        m = re.match(r"^A\s+K\s+(\w+)", stripped, re.IGNORECASE)
+        if m:
+            kf = m.group(1)
+            if kf and kf not in seen_keys:
+                key_fields.append(kf)
+                seen_keys.add(kf)
+
+    diagram_lines = [
+        f"graph {direction}",
+        f'    {file_node}["{file_label}"]',
+        f'    {rec_node}["{rec_format}"]',
+        f"    {file_node} --> {rec_node}",
+    ]
+    for kf in key_fields:
+        kf_node = re.sub(r"[^A-Za-z0-9_]", "_", kf) or "KEY"
+        diagram_lines.append(f'    {kf_node}["{kf}"]')
+        diagram_lines.append(f"    {rec_node} --> {kf_node}")
+
+    return "\n".join(diagram_lines)
+
+
 def _llm_mermaid(prompt_text: str, key: str, retry_on_error: bool = True) -> tuple[str, bool]:
     """
     Call LLM for a Mermaid diagram. Validate; retry once on failure.
@@ -361,19 +435,39 @@ def _llm_mermaid(prompt_text: str, key: str, retry_on_error: bool = True) -> tup
 
 
 def node_diagram(state: AgentState) -> AgentState:
-    """Step 4 — generate call-flow and data-flow Mermaid diagrams."""
+    """Step 4 — generate call-flow and data-flow Mermaid diagrams.
+
+    DDS files (callflow_prompt == "") bypass the LLM entirely and use
+    _build_dds_diagram() for a deterministic, always-valid diagram.
+    All other languages go through _llm_mermaid() with retry + fallback.
+    """
     language = state["language"]
     filename = state["filename"]
     files_used = state.get("files_used", [])
+    prompts = get_prompts(language)
     # Use only first chunk for diagram generation to stay within context limits
     source_head = state["chunks"][0] if state["chunks"] else state["source"]
     source_head_truncated = source_head[:4000]
 
     prog_name = filename.rsplit(".", 1)[0] if "." in filename else filename
 
+    # ── DDS: deterministic diagrams — no LLM call ──────────────────────────
+    if prompts.callflow_prompt == "":
+        full_source = state["source"]
+        cf_diagram = _build_dds_diagram("TD", filename, full_source)
+        df_diagram = _build_dds_diagram("LR", filename, full_source)
+        return {
+            **state,
+            "call_flow_diagram": cf_diagram,
+            "data_flow_diagram": df_diagram,
+            "call_flow_fallback": False,
+            "data_flow_fallback": False,
+        }
+
+    # ── Program languages: LLM-generated diagrams with fallback ────────────
     # Call-flow diagram
     cf_diagram, cf_fallback = _llm_mermaid(
-        CALL_FLOW_PROMPT.format(language=language, source=source_head_truncated),
+        prompts.callflow_prompt.format(language=language, source=source_head_truncated),
         key="call_flow_diagram",
     )
     if cf_fallback:
@@ -382,7 +476,7 @@ def node_diagram(state: AgentState) -> AgentState:
     # Data-flow diagram
     files_used_text = json.dumps(files_used, indent=2)
     df_diagram, df_fallback = _llm_mermaid(
-        DATA_FLOW_PROMPT.format(
+        prompts.dataflow_prompt.format(
             language=language,
             files_used=files_used_text,
             source_head=source_head_truncated[:2000],

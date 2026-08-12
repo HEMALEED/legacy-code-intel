@@ -254,16 +254,16 @@ def node_analyse(state: AgentState) -> AgentState:
             return {**state, "error": f"analyse (rules) step failed: {exc}"}
         all_rules.extend(rules_result.get("business_rules", []))
 
-        # Call 3 — observations
+        # Call 3 — observations (non-fatal: bad JSON just gives empty list)
         try:
             obs_result = _llm_json(
                 ANALYSE_OBSERVATIONS_PROMPT.format(
                     language=language, total_lines=total_lines, source=chunk
                 )
             )
+            all_observations.extend(obs_result.get("observations", []))
         except Exception as exc:
-            return {**state, "error": f"analyse (observations) step failed: {exc}"}
-        all_observations.extend(obs_result.get("observations", []))
+            logger.warning("observations step failed (non-fatal): %s", exc)
 
     # Combine summary sentences; deduplicate similar ones naively
     combined_summary = " ".join(s for s in summaries if s)[:1500]

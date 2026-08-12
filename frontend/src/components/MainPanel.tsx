@@ -64,7 +64,7 @@ export default function MainPanel({ jobId }: Props) {
     ...(isDev ? [{ key: 'raw' as Tab, label: '≡ Raw JSON' }] : []),
   ]
 
-  function handleExport() {
+  async function handleExport() {
     if (!docs) return
 
     const generatedAt = new Date().toLocaleString()
@@ -72,6 +72,33 @@ export default function MainPanel({ jobId }: Props) {
       ({ READ: '#166534', WRITE: '#991b1b', UPDATE: '#92400e', DELETE: '#991b1b' }[m.toUpperCase()] ?? '#374151')
     const modeBg = (m: string) =>
       ({ READ: '#dcfce7', WRITE: '#fee2e2', UPDATE: '#fef3c7', DELETE: '#fee2e2' }[m.toUpperCase()] ?? '#f3f4f6')
+
+    // Render Mermaid diagrams to SVG for embedding in the export
+    async function renderDiagramSvg(source: string, id: string): Promise<string> {
+      if (!source?.trim()) return ''
+      try {
+        const mermaid = (await import('mermaid')).default
+        mermaid.initialize({ startOnLoad: false, theme: 'default' })
+        const clean = source.trim()
+          .replace(/^```[a-z]*\n?/i, '').replace(/```$/, '')
+          .replace(/\bSubgraph\b/g, 'subgraph').replace(/\bEnd\b/g, 'end')
+          .trim()
+        const { svg } = await mermaid.render(id, clean)
+        return svg
+      } catch {
+        return `<pre style="font-size:0.78rem;background:#f9fafb;padding:12px;border-radius:6px;white-space:pre-wrap">${source}</pre>`
+      }
+    }
+
+    const [cfSvg, dfSvg] = await Promise.all([
+      renderDiagramSvg(docs.call_flow_diagram ?? '', 'export-cf'),
+      renderDiagramSvg(docs.data_flow_diagram ?? '', 'export-df'),
+    ])
+
+    const diagSection = (title: string, svgOrFallback: string) =>
+      svgOrFallback
+        ? `<h2>${title}</h2><div class="diagram-wrap">${svgOrFallback}</div>`
+        : ''
 
     const rulesHtml = (docs.business_rules ?? []).map(br => `
       <div class="rule">
@@ -99,9 +126,6 @@ export default function MainPanel({ jobId }: Props) {
         <td>${f.description}</td>
       </tr>`).join('')
 
-    const diagSection = (title: string, diagram: string) =>
-      diagram ? `<h2>${title}</h2><pre class="diagram">${diagram}</pre>` : ''
-
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -110,13 +134,12 @@ export default function MainPanel({ jobId }: Props) {
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system,"Segoe UI",system-ui,sans-serif; font-size: 14px;
-         line-height: 1.6; color: #1f2328; background: #fff; padding: 40px; max-width: 900px; margin: 0 auto; }
+         line-height: 1.6; color: #1f2328; background: #fff; padding: 40px; max-width: 960px; margin: 0 auto; }
   h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 4px; }
   h2 { font-size: 1rem; font-weight: 700; margin: 28px 0 10px;
        padding-bottom: 6px; border-bottom: 2px solid #e5e7eb; color: #374151; }
   .meta { font-size: 0.78rem; color: #6b7280; margin-bottom: 24px; }
-  .badge { display:inline-block; font-size:11px; font-weight:700; padding:2px 6px;
-           border-radius:3px; margin-right:6px; }
+  .badge { display:inline-block; font-size:11px; font-weight:700; padding:2px 6px; border-radius:3px; margin-right:6px; }
   .badge-ai { background:#dbeafe; color:#1e40af; }
   .badge-review { background:#fef3c7; color:#92400e; }
   .badge-info   { background:#f3f4f6; color:#6b7280; }
@@ -130,16 +153,12 @@ export default function MainPanel({ jobId }: Props) {
   .rule-header { display:flex; align-items:center; gap:10px; margin-bottom:2px; }
   .line-ref { font-size:0.75rem; color:#6b7280; background:#f3f4f6; padding:1px 6px; border-radius:3px; }
   .line-ref.unverified { color:#9ca3af; text-decoration:line-through; }
-  .obs { display:flex; align-items:baseline; gap:8px; padding:5px 0;
-         border-bottom:1px solid #f3f4f6; font-size:0.85rem; }
+  .obs { display:flex; align-items:baseline; gap:8px; padding:5px 0; border-bottom:1px solid #f3f4f6; font-size:0.85rem; }
   .obs-finding { flex:1; }
-  .summary-text { background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px;
-                  padding:12px 16px; line-height:1.7; color:#374151; }
-  .diagram { font-family:"Cascadia Code","Fira Code",monospace; font-size:0.78rem;
-             background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px;
-             padding:14px; white-space:pre-wrap; word-break:break-word; color:#374151; }
-  .footer { margin-top:40px; padding-top:12px; border-top:1px solid #e5e7eb;
-            font-size:0.72rem; color:#9ca3af; text-align:center; }
+  .summary-text { background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; padding:12px 16px; line-height:1.7; color:#374151; }
+  .diagram-wrap { background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; padding:16px; overflow-x:auto; }
+  .diagram-wrap svg { max-width:100%; height:auto; display:block; margin:0 auto; }
+  .footer { margin-top:40px; padding-top:12px; border-top:1px solid #e5e7eb; font-size:0.72rem; color:#9ca3af; text-align:center; }
   @media print { body { padding:20px; } }
 </style>
 </head>
@@ -167,8 +186,8 @@ export default function MainPanel({ jobId }: Props) {
   ${(docs.observations ?? []).length > 0 ? `
   <h2>Observations</h2>${obsHtml}` : ''}
 
-  ${diagSection('Call Flow Diagram (Mermaid source)', docs.call_flow_diagram ?? '')}
-  ${diagSection('Data Flow Diagram (Mermaid source)', docs.data_flow_diagram ?? '')}
+  ${diagSection('Call Flow Diagram', cfSvg)}
+  ${diagSection('Data Flow Diagram', dfSvg)}
 
   <div class="footer">Generated by LegacyLens &nbsp;·&nbsp; ${generatedAt}</div>
 </body>

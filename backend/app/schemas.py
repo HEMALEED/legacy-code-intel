@@ -14,17 +14,33 @@ class FileUsed(BaseModel):
     description: str
 
 
+from pydantic import field_validator
+
 class BusinessRule(BaseModel):
     rule: str
-    line_ref: str
+    line_ref: str = ""
     description: str = ""
     line_ref_verified: bool = True
+
+    @field_validator('line_ref', mode='before')
+    @classmethod
+    def coerce_line_ref(cls, v: object) -> str:
+        if isinstance(v, list):
+            return ', '.join(str(x) for x in v)
+        return str(v) if v is not None else ""
 
 
 class Observation(BaseModel):
     finding: str
     line_ref: str = ""
     severity: str = "REVIEW"  # REVIEW | INFO
+
+    @field_validator('line_ref', mode='before')
+    @classmethod
+    def coerce_line_ref(cls, v: object) -> str:
+        if isinstance(v, list):
+            return ', '.join(str(x) for x in v)
+        return str(v) if v is not None else ""
 
 
 # ─── Documentation result ─────────────────────────────────────────────────────

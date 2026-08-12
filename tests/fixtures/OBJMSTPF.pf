@@ -1,0 +1,37 @@
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* FILE NAME  : OBJMSTPF
+     A* DESCRIPTION: Object Master Physical File
+     A*              Stores all IBM i object definitions including library,
+     A*              name, type, environment and change tracking flags.
+     A* AUTHOR     : Legacy Systems Team
+     A* DATE       : 2005-03-14
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A                                      UNIQUE
+     A          R OBJMSTR
+     A            OBJLIB        10A         TEXT('Object Library')
+     A            OBJNAME       10A         TEXT('Object Name')
+     A            OBJTYPE        7A         TEXT('Object Type')
+     A                                      VALUES('*PGM' '*SRVPGM' '*FILE'
+     A                                      '*CMD' '*DTAARA' '*USRSPC')
+     A            OBJENV         1A         TEXT('Object Environment')
+     A                                      VALUES('P' 'Q' 'D')
+     A            OBJTXT        50A         TEXT('Object Text Description')
+     A            OBJCRTDAT      8A         TEXT('Object Create Date YYYYMMDD')
+     A            OBJCHGDAT      8A         TEXT('Object Last Change Date')
+     A            SRCCHG         1A         TEXT('Source Changed Flag')
+     A                                      VALUES('Y' 'N')
+     A            SRCLIB        10A         TEXT('Source Library')
+     A            SRCFILE       10A         TEXT('Source File')
+     A            SRCMBR        10A         TEXT('Source Member')
+     A            PGMSIZE        7P 0       TEXT('Program Size in Bytes')
+     A            PGMLVL         3P 0       TEXT('Program Level')
+     A            ACTFLAG        1A         TEXT('Active Flag')
+     A                                      VALUES('Y' 'N')
+     A            OWNER         10A         TEXT('Object Owner Profile')
+     A            LSTUSRPRF     10A         TEXT('Last Used User Profile')
+     A            LSTUSEDAT      8A         TEXT('Last Used Date YYYYMMDD')
+     A            NUMUSR         5P 0       TEXT('Number of Users')
+     A          K OBJLIB
+     A          K OBJNAME
+     A          K OBJTYPE
+     A          K OBJENV
